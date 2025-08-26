@@ -39,6 +39,48 @@ export const createDB = async () => {
   await client.end();
 };
 
+export const deleteDB = async () => {
+  const client = new Client({
+    user: dbUser,
+    password: dbPass,
+    host: dbHost,
+    database: process.env.DB_MAIN,
+  });
+
+  try {
+    await client.connect();
+
+    // First, terminate any active connections to the target DB
+    await client.query(
+      `
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = $1
+        AND pid <> pg_backend_pid();
+    `,
+      [dbName]
+    );
+
+    // Check if DB exists
+    const res = await client.query(
+      `SELECT 1 FROM pg_database WHERE datname = $1`,
+      [dbName]
+    );
+
+    if (res.rowCount > 0) {
+      // Same note as your createDB → identifiers can’t be parameterized
+      await client.query(`DROP DATABASE "${dbName}"`);
+      console.log(`Database ${dbName} deleted`);
+    } else {
+      console.log(`Database ${dbName} does not exist`);
+    }
+  } catch (err) {
+    console.error('Error deleting database:', err);
+  } finally {
+    await client.end();
+  }
+};
+
 export const sequelize = new Sequelize(dbName, dbUser, dbPass, {
   host: dbHost,
   dialect: process.env.DB_DIALECT,
